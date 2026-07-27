@@ -35,10 +35,12 @@ SIGN_BUTTON_PATH = ASSETS_DIR / "sign_button.png"                    # "立即�
 REWARD_BUTTON_PATH = ASSETS_DIR / "reward_button.png"                # "查看奖励"按钮
 REWARD_AREA_PATH = ASSETS_DIR / "reward_area.png"                    # 供 AI 识别的奖励区域截图
 WPS_LOGO_PATH = ASSETS_DIR / "wps_logo.png"                          # 标题栏左上角 WPS Office 图标（点击可回到首页）
+PANEL_CONTENT_PATH = ASSETS_DIR / "panel_content.png"                # 面板内"精选推荐"文字（面板真正打开后才出现的二次确认）
 CONFIDENCE = 0.78
 REWARD_CONFIDENCE = 0.72
 DETAILS_PANEL_CONFIDENCE = 0.72                                       # 详情模板匹配阈值（详情内容较长，可适当放低）
 WPS_LOGO_CONFIDENCE = 0.65                                            # WPS logo 模板阈值（图标较小，放低些）
+PANEL_CONTENT_CONFIDENCE = 0.72                                       # "精选推荐"模板阈值（文字模板）
 LAUNCH_TIMEOUT = 30
 PANEL_ANIMATION_DELAY = 1.2                         # 右侧面板滑出动画时间
 OPEN_PANEL_MAX_RETRIES = 5                          # 点击面板图标后未检测到详情的最大重试次数
@@ -246,25 +248,56 @@ def click_template(template_path: Path, label: str) -> tuple[bool, float]:
 
 
 def details_panel_visible() -> tuple[bool, float]:
-    """检测屏幕中是否出现「详情面板」内容（面板打开后才出现的元素）。
+    """检测屏幕中是否出现面板内容（面板打开后才出现的元素）。
 
-    返回 (是否可见, 最高匹配度)。
+    双重模板确认（避免单个模板误匹配）：
+      - 主模板 details_panel_opened.png（详情图标）
+      - 副模板 panel_content.png（"精选推荐"标题，仅面板内出现）
+    两个模板都存在时，必须同时匹配才视为面板真正打开；
+    只存在一个时退化到单模板匹配（向后兼容旧配置）。
+
+    返回 (是否可见, 最低匹配度)。
     """
-    if not DETAILS_PANEL_PATH.exists():
+    has_details = DETAILS_PANEL_PATH.exists()
+    has_content = PANEL_CONTENT_PATH.exists()
+
+    if not has_details and not has_content:
         return False, 0.0
-    _, _, score = find_template(DETAILS_PANEL_PATH, DETAILS_PANEL_CONFIDENCE, scale=1.0)
-    return score >= DETAILS_PANEL_CONFIDENCE, score
+
+    score_details = 0.0
+    score_content = 0.0
+
+    if has_details:
+        _, _, score_details = find_template(DETAILS_PANEL_PATH, DETAILS_PANEL_CONFIDENCE, scale=1.0)
+    if has_content:
+        _, _, score_content = find_template(PANEL_CONTENT_PATH, PANEL_CONTENT_CONFIDENCE, scale=1.0)
+
+    # 两个都存在时取两者中较低分作为"严苛判定"
+    if has_details and has_content:
+        return (
+            score_details >= DETAILS_PANEL_CONFIDENCE
+            and score_content >= PANEL_CONTENT_CONFIDENCE,
+            min(score_details, score_content),
+        )
+
+    # 只有 details 模板
+    if has_details:
+        return score_details >= DETAILS_PANEL_CONFIDENCE, score_details
+    # 只有 panel_content 模板
+    return score_content >= PANEL_CONTENT_CONFIDENCE, score_content
 
 
 def open_panel() -> bool:
-    """打开右侧面板：先按图标状态判定初始，再点击后用「详情模板」二次确认。
+    """打开右侧面板：先按图标状态判定初始，再点击后用「详情+精选推荐」双重模板确认。
 
     策略：
       1. 同时匹配未按下/已按下两种图标状态；
-      2. 若已按下模板高分命中，再检查详情模板；若详情可见，认为面板已打开；
-      3. 若未按下模板高分命中，则点击；点击后检查详情模板是否出现；
-      4. 详情模板未出现时，连续点击 OPEN_PANEL_MAX_RETRIES 次（每次后等动画）；
-      5. 仍找不到详情则继续往下走（不阻塞签到流程）。
+      2. 若已按下模板高分命中，再检查双重详情模板；若双重可见，认为面板已打开；
+      3. 若未按下模板高分命中，则点击；点击后检查双重详情模板是否出现；
+      4. 双重详情模板未出现时，连续点击 OPEN_PANEL_MAX_RETRIES 次（每次后等动画）；
+      5. 仍找不到则继续往下走（不阻塞签到流程）。
+
+    双重确认可避免「详情模板」单一匹配产生误判（如非最大化窗口下首页元素恰好匹配）。
     """
     unpressed_exists = OPEN_PANEL_UNPRESSED_PATH.exists()
     pressed_exists = OPEN_PANEL_PRESSED_PATH.exists()
@@ -296,13 +329,13 @@ def open_panel() -> bool:
         print(f"未找到 [打开右侧面板] 图标（未按下 {score_up:.2f}，已按下 {score_pd:.2f}）")
         return False
 
-    # 立即先校验一次详情模板：若已存在，说明面板本就开着，不必再点
+    # 立即先校验一次面板内容：若已存在，说明面板本就开着，不必再点
     visible, det_score = details_panel_visible()
     if visible:
-        print(f"检测到详情模板（匹配度 {det_score:.2f}），面板已开。")
+        print(f"检测到面板内容模板（双重确认匹配度 {det_score:.2f}），面板已开。")
         return True
 
-    # 未检测到详情模板，尝试点击图标打开面板（最多重试 N 次）
+    # 未检测到面板内容，尝试点击图标打开面板（最多重试 N 次）
     for attempt in range(1, OPEN_PANEL_MAX_RETRIES + 1):
         pyautogui.click(click_cx, click_cy)
         print(f"[第{attempt}/{OPEN_PANEL_MAX_RETRIES}次] 点击图标（{click_cx},{click_cy}，图标匹配 {click_score:.2f}）…")
@@ -310,12 +343,12 @@ def open_panel() -> bool:
 
         visible, det_score = details_panel_visible()
         if visible:
-            print(f"✓ 详情模板出现（匹配度 {det_score:.2f}），面板已成功打开。")
+            print(f"✓ 面板内容模板出现（双重确认匹配度 {det_score:.2f}），面板已成功打开。")
             return True
 
-        print(f"  详情模板未出现（最高匹配度 {det_score:.2f}，阈值 {DETAILS_PANEL_CONFIDENCE}）。")
+        print(f"  面板内容模板未出现（双重确认匹配度 {det_score:.2f}）。")
 
-    print(f"⚠️ 连续 {OPEN_PANEL_MAX_RETRIES} 次点击仍未检测到详情模板，继续执行后续签到。")
+    print(f"⚠️ 连续 {OPEN_PANEL_MAX_RETRIES} 次点击仍未检测到面板内容模板，继续执行后续签到。")
     return True
 
 
