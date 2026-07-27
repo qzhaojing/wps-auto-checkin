@@ -34,9 +34,11 @@ DETAILS_PANEL_PATH = ASSETS_DIR / "details_panel_opened.png"         # 面板打
 SIGN_BUTTON_PATH = ASSETS_DIR / "sign_button.png"                    # "立即签到"按钮
 REWARD_BUTTON_PATH = ASSETS_DIR / "reward_button.png"                # "查看奖励"按钮
 REWARD_AREA_PATH = ASSETS_DIR / "reward_area.png"                    # 供 AI 识别的奖励区域截图
+WPS_LOGO_PATH = ASSETS_DIR / "wps_logo.png"                          # 标题栏左上角 WPS Office 图标（点击可回到首页）
 CONFIDENCE = 0.78
 REWARD_CONFIDENCE = 0.72
 DETAILS_PANEL_CONFIDENCE = 0.72                                       # 详情模板匹配阈值（详情内容较长，可适当放低）
+WPS_LOGO_CONFIDENCE = 0.65                                            # WPS logo 模板阈值（图标较小，放低些）
 LAUNCH_TIMEOUT = 30
 PANEL_ANIMATION_DELAY = 1.2                         # 右侧面板滑出动画时间
 OPEN_PANEL_MAX_RETRIES = 5                          # 点击面板图标后未检测到详情的最大重试次数
@@ -172,12 +174,35 @@ def activate_window(win):
 
 
 def goto_home(win, timeout: int = 10) -> bool:
-    """如果当前不是 WPS 首页，点击左侧边栏入口回到首页。"""
+    """如果当前不是 WPS 首页，回到首页。
+
+    策略：点击标题栏左上角的 WPS Office 图标（始终出现在每个 WPS 窗口的左上角，
+    点击后会弹出菜单/回到首页，无论打开了多少文档都有效）。
+    """
     if is_home_window(win.title):
         return True
     print("当前为文档窗口，尝试回到 WPS 首页...")
-    # 左侧边栏顶部入口（相对窗口左上角的经验坐标）
-    pyautogui.click(win.left + 25, win.top + 100)
+    win_left, win_top = win.left, win.top
+
+    # 优先用模板匹配找到 WPS 图标（更精确，能自适应不同 DPI）
+    cx, cy, score = (None, None, 0.0)
+    if WPS_LOGO_PATH.exists():
+        # 图标较小，scale=1.0 保留原细节；只在标题栏范围内搜，减少误匹配
+        cx, cy, score = find_template(WPS_LOGO_PATH, WPS_LOGO_CONFIDENCE, scale=1.0)
+
+    if cx is None:
+        # 模板没匹配上（图标版本不一致或截屏 DPI 异常），退化到窗口左上角的固定坐标
+        # 经验值：图标在标题栏最左侧，距窗口左边缘约 20px、距窗口顶部约 12px
+        cx, cy = win_left + 30, win_top + 12
+        print(f"[回首页] 未匹配到 WPS logo（分数 {score:.2f}），退化到固定坐标 ({cx},{cy})")
+    else:
+        print(f"[回首页] 已匹配 WPS logo（分数 {score:.2f}），点击 ({cx},{cy})")
+
+    pyautogui.click(cx, cy)
+    # 第一次点击通常会弹出"首页/新建/打开"菜单，再点一次相同位置确认进入首页
+    time.sleep(0.6)
+    pyautogui.click(cx, cy)
+
     for _ in range(timeout):
         time.sleep(0.5)
         w = find_wps_window()

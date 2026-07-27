@@ -158,7 +158,7 @@ WPS_PATH = r""              # 留空自动定位，或手动填写完整路径
 | `details_panel_opened.png` | 面板打开后内部详情内容（用于二次确认面板真正打开） |
 | `sign_button.png` | 「立即签到」按钮模板 |
 | `reward_button.png` | 「查看奖励」按钮模板（用于判断是否已签到） |
-| `home_icon.png` | 左侧边栏首页图标（备用入口） |
+| `wps_logo.png` | 标题栏左上角 WPS Office 图标（点击回到首页，无论开了几个文档都有效） |
 | `reward_area.png` | 自动生成的奖励面板截图 |
 
 若 WPS 更新界面后匹配失败，用 `capture_template.py` 重新截取：
@@ -183,9 +183,9 @@ wps-auto-checkin/
 │   ├── open_panel_unpressed.png
 │   ├── open_panel_pressed.png
 │   ├── details_panel_opened.png
+│   ├── wps_logo.png
 │   ├── sign_button.png
 │   ├── reward_button.png
-│   ├── home_icon.png
 │   └── reward_area.png     # Auto-generated / 自动生成
 ├── README.md
 └── LICENSE
