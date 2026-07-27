@@ -32,7 +32,8 @@ OPEN_PANEL_UNPRESSED_PATH = ASSETS_DIR / "open_panel_unpressed.png"  # 右上角
 OPEN_PANEL_PRESSED_PATH = ASSETS_DIR / "open_panel_pressed.png"      # 右上角面板图标（已按下）
 DETAILS_PANEL_PATH = ASSETS_DIR / "details_panel_opened.png"         # 面板打开后出现的详情内容（用于判断面板是否真正打开）
 SIGN_BUTTON_PATH = ASSETS_DIR / "sign_button.png"                    # "立即签到"按钮（主要模板）
-SIGN_BUTTON_ALT_PATH = ASSETS_DIR / "sign_button_alt.png"            # "立即签到"按钮（备用模板，适应不同状态/样式）
+SIGN_BUTTON_ALT_PATH = ASSETS_DIR / "sign_button_alt.png"            # "立即签到"按钮（备用模板 #1，适应不同状态/样式）
+SIGN_BUTTON_ALT2_PATH = ASSETS_DIR / "sign_button_alt2.png"          # "立即签到"按钮（备用模板 #2，右侧蓝色条样式）
 REWARD_BUTTON_PATH = ASSETS_DIR / "reward_button.png"                # "查看奖励"按钮
 REWARD_AREA_PATH = ASSETS_DIR / "reward_area.png"                    # 供 AI 识别的奖励区域截图
 WPS_LOGO_PATH = ASSETS_DIR / "wps_logo.png"                          # 标题栏左上角 WPS Office 图标（点击可回到首页）
@@ -393,7 +394,7 @@ def region_diff(before: np.ndarray, after: np.ndarray) -> float:
 def detect_button_state() -> tuple[str, tuple[int, int] | None, float]:
     """检测右侧面板按钮状态。
 
-    同时匹配多个「立即签到」模板（sign_button.png / sign_button_alt.png），
+    同时匹配多个「立即签到」模板（sign_button.png / sign_button_alt.png / sign_button_alt2.png），
     取匹配度最高者；再与「查看奖励」比较，返回当前按钮状态。
 
     返回 (state, center, score) :
@@ -402,9 +403,9 @@ def detect_button_state() -> tuple[str, tuple[int, int] | None, float]:
       - score: 最高匹配度
     """
     # 所有可用的立即签到模板
-    sign_paths = [p for p in (SIGN_BUTTON_PATH, SIGN_BUTTON_ALT_PATH) if p.exists()]
+    sign_paths = [p for p in (SIGN_BUTTON_PATH, SIGN_BUTTON_ALT_PATH, SIGN_BUTTON_ALT2_PATH) if p.exists()]
     if not sign_paths:
-        print(f"错误：缺少签到按钮模板 {SIGN_BUTTON_PATH} 或 {SIGN_BUTTON_ALT_PATH}")
+        print(f"错误：缺少签到按钮模板 {SIGN_BUTTON_PATH} / {SIGN_BUTTON_ALT_PATH} / {SIGN_BUTTON_ALT2_PATH}")
         return "unknown", None, 0.0
 
     # 签到/奖励按钮较小，用原图匹配更准
@@ -564,9 +565,9 @@ def main() -> int:
         print(f"[防检测] 随机延迟 {delay_seconds}s（最大 {args.max_delay}s）……")
         time.sleep(delay_seconds)
 
-    if not SIGN_BUTTON_PATH.exists() and not SIGN_BUTTON_ALT_PATH.exists():
-        print(f"错误：缺少签到按钮模板 {SIGN_BUTTON_PATH} 或 {SIGN_BUTTON_ALT_PATH}")
-        print("请运行 capture_template.py 截取，或从截图复制到 assets/sign_button.png / sign_button_alt.png。")
+    if not SIGN_BUTTON_PATH.exists() and not SIGN_BUTTON_ALT_PATH.exists() and not SIGN_BUTTON_ALT2_PATH.exists():
+        print(f"错误：缺少签到按钮模板 {SIGN_BUTTON_PATH} / {SIGN_BUTTON_ALT_PATH} / {SIGN_BUTTON_ALT2_PATH}")
+        print("请运行 capture_template.py 截取，或从截图复制到 assets/sign_button.png / sign_button_alt.png / sign_button_alt2.png。")
         return 1
     if not REWARD_BUTTON_PATH.exists():
         print(f"警告：缺少查看奖励模板 {REWARD_BUTTON_PATH}，将无法判断今日是否已签到。")
@@ -602,7 +603,8 @@ def main() -> int:
     print("可能原因：WPS 界面更新、窗口被遮挡、DPI 缩放变化，或模板图与当前显示不一致。")
     print("请重新截取以下模板再试：")
     print("  - assets/sign_button.png（立即签到按钮）")
-    print("  - assets/sign_button_alt.png（立即签到按钮备用样式）")
+    print("  - assets/sign_button_alt.png（立即签到按钮备用样式 #1）")
+    print("  - assets/sign_button_alt2.png（立即签到按钮右侧蓝色条样式）")
     print("  - assets/reward_button.png（查看奖励按钮）")
     print("  - assets/open_panel_unpressed.png（右上角面板图标未按下状态）")
     print("  - assets/open_panel_pressed.png（右上角面板图标已按下状态）")

@@ -25,7 +25,7 @@ Automate WPS Office desktop client daily points check-in on Windows. The script 
 2. Returns to the WPS home page (even if currently in a document/PDF tab)
 3. Opens the right-side panel by clicking the top-right icon (detects **unpressed / pressed** states)
 4. Looks for one of two buttons in the panel:
-   - **立即签到 (Check-in Now)** → matches `sign_button.png` or `sign_button_alt.png`, clicks the best match
+   - **立即签到 (Check-in Now)** → matches `sign_button.png`, `sign_button_alt.png`, or `sign_button_alt2.png`, clicks the best match
    - **查看奖励 (View Rewards)** → reports "already checked in today" and skips
 5. After successful check-in, captures a screenshot of the reward area for AI/OCR recognition (**only with `--with-screenshot` flag**)
 6. Minimizes (default) or closes WPS
@@ -101,7 +101,7 @@ Windows 端 WPS Office 桌面客户端积分自动签到。脚本通过 **OpenCV
 2. 自动回到 WPS 首页（即使当前在文档/PDF 标签页）
 3. 点击右上角图标打开右侧面板（自动识别未按下/已按下两种图标状态）
 4. 在面板中查找两种按钮：
-   - **立即签到** → 同时匹配 `sign_button.png` / `sign_button_alt.png`，点击匹配度最高者，并验证按钮变为"查看奖励"
+   - **立即签到** → 同时匹配 `sign_button.png` / `sign_button_alt.png` / `sign_button_alt2.png`，点击匹配度最高者，并验证按钮变为"查看奖励"
    - **查看奖励** → 提示"今日可能已签到"，跳过点击
 5. 签到成功后截图右侧面板奖励区域，供 AI 识别连签天数和今日奖励
 6. 默认最小化 WPS（可配置为关闭）
@@ -158,7 +158,8 @@ WPS_PATH = r""              # 留空自动定位，或手动填写完整路径
 | `details_panel_opened.png` | 面板打开后内部详情图标（双重确认 #1） |
 | `panel_content.png` | "精选推荐"标题文字（双重确认 #2，仅面板内可见，避免单一模板误匹配） |
 | `sign_button.png` | 「立即签到」按钮模板（主） |
-| `sign_button_alt.png` | 「立即签到」按钮模板（备用样式/状态，脚本自动取最高匹配度） |
+| `sign_button_alt.png` | 「立即签到」按钮模板（备用样式/状态 #1，脚本自动取最高匹配度） |
+| `sign_button_alt2.png` | 「立即签到」按钮模板（右侧蓝色条样式 #2，脚本自动取最高匹配度） |
 | `reward_button.png` | 「查看奖励」按钮模板（用于判断是否已签到） |
 | `wps_logo.png` | 标题栏左上角 WPS Office 图标（点击回到首页，无论开了几个文档都有效） |
 | `reward_area.png` | 自动生成的奖励面板截图 |
@@ -188,7 +189,8 @@ wps-auto-checkin/
 │   ├── panel_content.png       # "精选推荐"（双重确认 #2）
 │   ├── wps_logo.png
 │   ├── sign_button.png         # "立即签到"（主）
-│   ├── sign_button_alt.png     # "立即签到"（备用样式）
+│   ├── sign_button_alt.png     # "立即签到"（备用样式 #1）
+│   ├── sign_button_alt2.png    # "立即签到"（右侧蓝色条样式 #2）
 │   ├── reward_button.png
 │   └── reward_area.png         # Auto-generated / 自动生成
 ├── README.md
