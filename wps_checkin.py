@@ -357,7 +357,9 @@ def open_panel() -> bool:
     for attempt in range(1, OPEN_PANEL_MAX_RETRIES + 1):
         pyautogui.click(click_cx, click_cy)
         print(f"[第{attempt}/{OPEN_PANEL_MAX_RETRIES}次] 点击图标（{click_cx},{click_cy}，图标匹配 {click_score:.2f}）…")
-        time.sleep(PANEL_ANIMATION_DELAY)
+        # 移开鼠标避免弹出菜单遮挡面板内容，等面板动画完成后再检测
+        pyautogui.moveTo(0, 0)
+        time.sleep(PANEL_ANIMATION_DELAY + 0.3)
 
         visible, det_score = details_panel_visible(pressed_score=score_pd)
         if visible:
