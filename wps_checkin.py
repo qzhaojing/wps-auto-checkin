@@ -30,13 +30,16 @@ pyautogui.PAUSE = 0.3
 ASSETS_DIR = Path(__file__).parent / "assets"
 OPEN_PANEL_UNPRESSED_PATH = ASSETS_DIR / "open_panel_unpressed.png"  # 右上角面板图标（未按下）
 OPEN_PANEL_PRESSED_PATH = ASSETS_DIR / "open_panel_pressed.png"      # 右上角面板图标（已按下）
+DETAILS_PANEL_PATH = ASSETS_DIR / "details_panel_opened.png"         # 面板打开后出现的详情内容（用于判断面板是否真正打开）
 SIGN_BUTTON_PATH = ASSETS_DIR / "sign_button.png"                    # "立即签到"按钮
 REWARD_BUTTON_PATH = ASSETS_DIR / "reward_button.png"                # "查看奖励"按钮
 REWARD_AREA_PATH = ASSETS_DIR / "reward_area.png"                    # 供 AI 识别的奖励区域截图
 CONFIDENCE = 0.78
 REWARD_CONFIDENCE = 0.72
+DETAILS_PANEL_CONFIDENCE = 0.72                                       # 详情模板匹配阈值（详情内容较长，可适当放低）
 LAUNCH_TIMEOUT = 30
 PANEL_ANIMATION_DELAY = 1.2                         # 右侧面板滑出动画时间
+OPEN_PANEL_MAX_RETRIES = 5                          # 点击面板图标后未检测到详情的最大重试次数
 WPS_PATH = r""  # 默认留空，自动用 Everything(es.exe) 定位；定位失败时手动填写完整路径
 
 # 签到完成后的收尾动作：
@@ -217,8 +220,27 @@ def click_template(template_path: Path, label: str) -> tuple[bool, float]:
     return False, score
 
 
+def details_panel_visible() -> tuple[bool, float]:
+    """检测屏幕中是否出现「详情面板」内容（面板打开后才出现的元素）。
+
+    返回 (是否可见, 最高匹配度)。
+    """
+    if not DETAILS_PANEL_PATH.exists():
+        return False, 0.0
+    _, _, score = find_template(DETAILS_PANEL_PATH, DETAILS_PANEL_CONFIDENCE, scale=1.0)
+    return score >= DETAILS_PANEL_CONFIDENCE, score
+
+
 def open_panel() -> bool:
-    """打开右侧面板：同时检测已按下/未按下两种状态，按匹配度决定是否需要点击。"""
+    """打开右侧面板：先按图标状态判定初始，再点击后用「详情模板」二次确认。
+
+    策略：
+      1. 同时匹配未按下/已按下两种图标状态；
+      2. 若已按下模板高分命中，再检查详情模板；若详情可见，认为面板已打开；
+      3. 若未按下模板高分命中，则点击；点击后检查详情模板是否出现；
+      4. 详情模板未出现时，连续点击 OPEN_PANEL_MAX_RETRIES 次（每次后等动画）；
+      5. 仍找不到详情则继续往下走（不阻塞签到流程）。
+    """
     unpressed_exists = OPEN_PANEL_UNPRESSED_PATH.exists()
     pressed_exists = OPEN_PANEL_PRESSED_PATH.exists()
 
@@ -238,21 +260,38 @@ def open_panel() -> bool:
         else (None, None, 0.0)
     )
 
-    # 如果"已按下"明显比"未按下"更匹配，说明面板已打开
-    if cx_pd is not None and (cx_up is None or score_pd > score_up + 0.08):
-        print(f"面板图标已呈按下状态（匹配度 {score_pd:.2f}），右侧面板应已打开。")
+    # 优先选择当前图标中心；若未按下分数明显更高，用未按下中心
+    if cx_up is not None and (cx_pd is None or score_up >= score_pd):
+        click_cx, click_cy, click_score = cx_up, cy_up, score_up
+        clicked_state = "unpressed"
+    elif cx_pd is not None:
+        click_cx, click_cy, click_score = cx_pd, cy_pd, score_pd
+        clicked_state = "pressed"
+    else:
+        print(f"未找到 [打开右侧面板] 图标（未按下 {score_up:.2f}，已按下 {score_pd:.2f}）")
+        return False
+
+    # 立即先校验一次详情模板：若已存在，说明面板本就开着，不必再点
+    visible, det_score = details_panel_visible()
+    if visible:
+        print(f"检测到详情模板（匹配度 {det_score:.2f}），面板已开。")
         return True
 
-    # 否则视为未按下，点击打开
-    if cx_up is not None:
-        pyautogui.click(cx_up, cy_up)
-        print(f"已点击 [打开右侧面板] 图标（{cx_up},{cy_up}，匹配度 {score_up:.2f}）")
-        print(f"等待面板动画 {PANEL_ANIMATION_DELAY}s……")
+    # 未检测到详情模板，尝试点击图标打开面板（最多重试 N 次）
+    for attempt in range(1, OPEN_PANEL_MAX_RETRIES + 1):
+        pyautogui.click(click_cx, click_cy)
+        print(f"[第{attempt}/{OPEN_PANEL_MAX_RETRIES}次] 点击图标（{click_cx},{click_cy}，图标匹配 {click_score:.2f}）…")
         time.sleep(PANEL_ANIMATION_DELAY)
-        return True
 
-    print(f"未找到 [打开右侧面板] 图标（未按下 {score_up:.2f}，已按下 {score_pd:.2f}）")
-    return False
+        visible, det_score = details_panel_visible()
+        if visible:
+            print(f"✓ 详情模板出现（匹配度 {det_score:.2f}），面板已成功打开。")
+            return True
+
+        print(f"  详情模板未出现（最高匹配度 {det_score:.2f}，阈值 {DETAILS_PANEL_CONFIDENCE}）。")
+
+    print(f"⚠️ 连续 {OPEN_PANEL_MAX_RETRIES} 次点击仍未检测到详情模板，继续执行后续签到。")
+    return True
 
 
 def region_around(cx: int, cy: int, w: int = 220, h: int = 100):

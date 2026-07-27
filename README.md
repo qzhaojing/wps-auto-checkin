@@ -143,6 +143,7 @@ WPS_PATH = r""              # 留空自动定位，或手动填写完整路径
 |-------------|----------------|
 | `open_panel_unpressed.png` | 右上角面板图标（未按下，需要点击） |
 | `open_panel_pressed.png` | 右上角面板图标（已按下，面板已打开） |
+| `details_panel_opened.png` | 面板打开后内部详情内容（用于二次确认面板真正打开） |
 | `sign_button.png` | 「立即签到」按钮模板 |
 | `reward_button.png` | 「查看奖励」按钮模板（用于判断是否已签到） |
 | `home_icon.png` | 左侧边栏首页图标（备用入口） |
@@ -169,6 +170,7 @@ wps-auto-checkin/
 ├── assets/                 # Image templates / 图像模板
 │   ├── open_panel_unpressed.png
 │   ├── open_panel_pressed.png
+│   ├── details_panel_opened.png
 │   ├── sign_button.png
 │   ├── reward_button.png
 │   ├── home_icon.png
