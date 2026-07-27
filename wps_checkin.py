@@ -247,16 +247,21 @@ def click_template(template_path: Path, label: str) -> tuple[bool, float]:
     return False, score
 
 
-def details_panel_visible() -> tuple[bool, float]:
+def details_panel_visible(pressed_score: float = 0.0) -> tuple[bool, float]:
     """检测屏幕中是否出现面板内容（面板打开后才出现的元素）。
 
     双重模板确认（避免单个模板误匹配）：
       - 主模板 details_panel_opened.png（详情图标）
       - 副模板 panel_content.png（"精选推荐"标题，仅面板内出现）
-    两个模板都存在时，必须同时匹配才视为面板真正打开；
-    只存在一个时退化到单模板匹配（向后兼容旧配置）。
 
-    返回 (是否可见, 最低匹配度)。
+    判定逻辑（按优先级）：
+      1. 两个模板都存在时，都匹配 → 面板肯定打开；
+      2. 两个模板都存在，但仅一个达标，且图标按下分 > 0.85 → 高置信度说明面板已开，
+         放宽为"仅一个匹配阈值 * 0.8"即可（避免 `panel_content` 因截图偏小匹配不佳）；
+      3. 都匹配不上，但图标按下分超高（>= 0.90）→ 视为打开（跳过 N 次无意义重试）；
+      4. 只有一个模板存在时退化到单模板匹配（向后兼容旧配置）。
+
+    返回 (是否可见, 有效匹配度)。
     """
     has_details = DETAILS_PANEL_PATH.exists()
     has_content = PANEL_CONTENT_PATH.exists()
@@ -272,13 +277,26 @@ def details_panel_visible() -> tuple[bool, float]:
     if has_content:
         _, _, score_content = find_template(PANEL_CONTENT_PATH, PANEL_CONTENT_CONFIDENCE, scale=1.0)
 
-    # 两个都存在时取两者中较低分作为"严苛判定"
+    # 两个都存在
     if has_details and has_content:
-        return (
-            score_details >= DETAILS_PANEL_CONFIDENCE
-            and score_content >= PANEL_CONTENT_CONFIDENCE,
-            min(score_details, score_content),
-        )
+        details_ok = score_details >= DETAILS_PANEL_CONFIDENCE
+        content_ok = score_content >= PANEL_CONTENT_CONFIDENCE
+
+        if details_ok and content_ok:
+            return True, min(score_details, score_content)
+
+        # 都没达标，但图标按下分极高 → 跳过重试，视为打开
+        if not details_ok and not content_ok and pressed_score >= 0.90:
+            return True, max(score_details, score_content)
+
+        # 仅一个达标 + 图标高置信 → 放宽非达标模板的阈值为 0.8x
+        relaxed_threshold = DETAILS_PANEL_CONFIDENCE * 0.8
+        if pressed_score >= 0.85:
+            if (details_ok and score_content >= relaxed_threshold) or \
+               (content_ok and score_details >= relaxed_threshold):
+                return True, min(score_details, score_content)
+
+        return False, min(score_details, score_content)
 
     # 只有 details 模板
     if has_details:
@@ -330,7 +348,7 @@ def open_panel() -> bool:
         return False
 
     # 立即先校验一次面板内容：若已存在，说明面板本就开着，不必再点
-    visible, det_score = details_panel_visible()
+    visible, det_score = details_panel_visible(pressed_score=score_pd)
     if visible:
         print(f"检测到面板内容模板（双重确认匹配度 {det_score:.2f}），面板已开。")
         return True
@@ -341,7 +359,7 @@ def open_panel() -> bool:
         print(f"[第{attempt}/{OPEN_PANEL_MAX_RETRIES}次] 点击图标（{click_cx},{click_cy}，图标匹配 {click_score:.2f}）…")
         time.sleep(PANEL_ANIMATION_DELAY)
 
-        visible, det_score = details_panel_visible()
+        visible, det_score = details_panel_visible(pressed_score=score_pd)
         if visible:
             print(f"✓ 面板内容模板出现（双重确认匹配度 {det_score:.2f}），面板已成功打开。")
             return True
