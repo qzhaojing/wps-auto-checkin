@@ -347,7 +347,7 @@ def capture_reward_area(center: tuple[int, int] | None = None) -> Path:
     return REWARD_AREA_PATH
 
 
-def do_signin(retries: int = 3) -> tuple[str, Path | None]:
+def do_signin(retries: int = 3, save_screenshot: bool = False) -> tuple[str, Path | None]:
     """执行签到流程。
 
     返回 (status, reward_path):
@@ -355,7 +355,7 @@ def do_signin(retries: int = 3) -> tuple[str, Path | None]:
         "signed"        -> 点击后成功变为"查看奖励"
         "already_signed"-> 发现已经是"查看奖励"/找不到立即签到但面板已打开，今日可能已人工签到
         "failed"        -> 未找到按钮或点击后状态未变化
-      - reward_path: 奖励区域截图路径，成功或已签到时返回
+      - reward_path: 奖励区域截图路径（仅 save_screenshot=True 时返回，否则 None）
     """
     # 先确保右侧面板已打开（避免在全屏主界面误匹配其他蓝色按钮）
     if OPEN_PANEL_UNPRESSED_PATH.exists() or OPEN_PANEL_PRESSED_PATH.exists():
@@ -368,14 +368,14 @@ def do_signin(retries: int = 3) -> tuple[str, Path | None]:
 
         if state == "reward":
             print(f"检测到 [查看奖励]（匹配度 {score:.2f}），今日可能已人工签到。")
-            path = capture_reward_area(center)
+            path = capture_reward_area(center) if save_screenshot else None
             return "already_signed", path
 
         if state == "unknown":
             # 面板已经打开，但仍找不到"立即签到"，大概率今日已签到（界面显示"明日签到"等）
             if panel_opened:
-                print("面板已打开但未找到 [立即签到]，可能今日已签到，截图交给 AI 识别。")
-                path = capture_reward_area()
+                print("面板已打开但未找到 [立即签到]，可能今日已签到。")
+                path = capture_reward_area() if save_screenshot else None
                 return "already_signed", path
             if i < retries - 1:
                 time.sleep(1.5)
@@ -400,11 +400,11 @@ def do_signin(retries: int = 3) -> tuple[str, Path | None]:
 
         if became_reward:
             print("按钮已变为 [查看奖励]，签到成功。")
-            path = capture_reward_area(center_after)
+            path = capture_reward_area(center_after) if save_screenshot else None
             return "signed", path
         if changed:
             print("按钮状态已变化，视为签到成功。")
-            path = capture_reward_area(center)
+            path = capture_reward_area(center) if save_screenshot else None
             return "signed", path
 
         if i < retries - 1:
@@ -451,6 +451,12 @@ def parse_args() -> argparse.Namespace:
         metavar="SECONDS",
         help="启动后随机等待 0~N 秒再开始签到，用于绕过时间规律检测（默认 0=不等待）",
     )
+    parser.add_argument(
+        "--with-screenshot",
+        action="store_true",
+        default=False,
+        help="保存奖励区域截图供 AI 识别（默认不保存，省 token 模式）",
+    )
     return parser.parse_args()
 
 
@@ -478,7 +484,7 @@ def main() -> int:
     if not goto_home(win):
         print("⚠️ 未能自动回到 WPS 首页，将尝试继续签到。")
 
-    status, reward_path = do_signin()
+    status, reward_path = do_signin(save_screenshot=args.with_screenshot)
 
     delay_info = f"（今日随机延迟 {delay_seconds}s）" if delay_seconds > 0 else ""
 

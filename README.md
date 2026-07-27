@@ -27,7 +27,7 @@ Automate WPS Office desktop client daily points check-in on Windows. The script 
 4. Looks for one of two buttons in the panel:
    - **立即签到 (Check-in Now)** → clicks it
    - **查看奖励 (View Rewards)** → reports "already checked in today" and skips
-5. After successful check-in, captures a screenshot of the reward area for AI/OCR recognition
+5. After successful check-in, captures a screenshot of the reward area for AI/OCR recognition (**only with `--with-screenshot` flag**)
 6. Minimizes (default) or closes WPS
 
 ### Quick Start
@@ -36,18 +36,30 @@ Automate WPS Office desktop client daily points check-in on Windows. The script 
 # 1. Install dependencies
 python -m pip install -r requirements.txt
 
-# 2. Run once manually to test
+# 2. Run once manually to test (default: token-save mode, no screenshot)
 python wps_checkin.py
 
 # 3. Set up daily automation (right-click → Run as Administrator)
 #    Right-click create_task.ps1 → Run with PowerShell
 ```
 
-The script also supports a random start delay to avoid daily timing patterns:
+The script supports two optional flags:
 
 ```powershell
+# Random delay to avoid timing detection
 python wps_checkin.py --max-delay 115   # random 0~115s delay before clicking
+
+# Save reward screenshot for AI recognition (costs tokens, off by default)
+python wps_checkin.py --with-screenshot
 ```
+
+### Token-Save Mode (Default)
+
+By default, the script runs in **token-save mode**: it completes the full check-in flow but does NOT save a reward screenshot. The AI determines success/failure purely from the script's stdout text output (e.g. `✅ 签到成功` or `⚠️ 今日可能已人工签到`).
+
+Use `--with-screenshot` only when you need the AI to read reward details (consecutive days, specific rewards). This avoids wasting tokens on image recognition for routine daily check-ins.
+
+默认省 token 模式：脚本完成全部签到流程但不保存截图，AI 直接根据 stdout 文字判断结果。仅在需要 AI 识别连签天数和奖励明细时才加 `--with-screenshot`。
 
 ### Anti-Detection
 
