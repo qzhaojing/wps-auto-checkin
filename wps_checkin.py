@@ -31,7 +31,8 @@ ASSETS_DIR = Path(__file__).parent / "assets"
 OPEN_PANEL_UNPRESSED_PATH = ASSETS_DIR / "open_panel_unpressed.png"  # 右上角面板图标（未按下）
 OPEN_PANEL_PRESSED_PATH = ASSETS_DIR / "open_panel_pressed.png"      # 右上角面板图标（已按下）
 DETAILS_PANEL_PATH = ASSETS_DIR / "details_panel_opened.png"         # 面板打开后出现的详情内容（用于判断面板是否真正打开）
-SIGN_BUTTON_PATH = ASSETS_DIR / "sign_button.png"                    # "立即签到"按钮
+SIGN_BUTTON_PATH = ASSETS_DIR / "sign_button.png"                    # "立即签到"按钮（主要模板）
+SIGN_BUTTON_ALT_PATH = ASSETS_DIR / "sign_button_alt.png"            # "立即签到"按钮（备用模板，适应不同状态/样式）
 REWARD_BUTTON_PATH = ASSETS_DIR / "reward_button.png"                # "查看奖励"按钮
 REWARD_AREA_PATH = ASSETS_DIR / "reward_area.png"                    # 供 AI 识别的奖励区域截图
 WPS_LOGO_PATH = ASSETS_DIR / "wps_logo.png"                          # 标题栏左上角 WPS Office 图标（点击可回到首页）
@@ -44,7 +45,7 @@ PANEL_CONTENT_CONFIDENCE = 0.72                                       # "精选�
 LAUNCH_TIMEOUT = 30
 PANEL_ANIMATION_DELAY = 1.2                         # 右侧面板滑出动画时间
 OPEN_PANEL_MAX_RETRIES = 5                          # 点击面板图标后未检测到详情的最大重试次数
-WPS_PATH = r""  # 默认留空，自动用 Everything(es.exe) 定位；定位失败时手动填写完整路径
+WPS_PATH = r"C:\Users\Administrator\AppData\Local\kingsoft\WPS Office\12.1.0.26895\office6\wps.exe"  # 默认最新版；留空则自动用 Everything(es.exe) 定位
 
 # 签到完成后的收尾动作：
 #   "minimize" -> 最小化 WPS（默认，避免误关未保存文档）
@@ -347,7 +348,7 @@ def open_panel() -> bool:
         print(f"未找到 [打开右侧面板] 图标（未按下 {score_up:.2f}，已按下 {score_pd:.2f}）")
         return False
 
-    # 立即先校验一次面板内容：若已存在，说明面板本就开着，不必再点
+    # 立即先校验一次详情模板：若已存在，说明面板本就开着，不必再点
     visible, det_score = details_panel_visible(pressed_score=score_pd)
     if visible:
         print(f"检测到面板内容模板（双重确认匹配度 {det_score:.2f}），面板已开。")
@@ -392,19 +393,34 @@ def region_diff(before: np.ndarray, after: np.ndarray) -> float:
 def detect_button_state() -> tuple[str, tuple[int, int] | None, float]:
     """检测右侧面板按钮状态。
 
+    同时匹配多个「立即签到」模板（sign_button.png / sign_button_alt.png），
+    取匹配度最高者；再与「查看奖励」比较，返回当前按钮状态。
+
     返回 (state, center, score) :
       - state: "sign" | "reward" | "unknown"
       - center: 按钮中心坐标 (cx, cy)，state 为 unknown 时为 None
       - score: 最高匹配度
     """
-    # 签到/奖励按钮较小，用原图匹配更准；面板图标较大，可用缩放省内存
-    cx_sign, cy_sign, score_sign = find_template(SIGN_BUTTON_PATH, CONFIDENCE, scale=1.0)
+    # 所有可用的立即签到模板
+    sign_paths = [p for p in (SIGN_BUTTON_PATH, SIGN_BUTTON_ALT_PATH) if p.exists()]
+    if not sign_paths:
+        print(f"错误：缺少签到按钮模板 {SIGN_BUTTON_PATH} 或 {SIGN_BUTTON_ALT_PATH}")
+        return "unknown", None, 0.0
+
+    # 签到/奖励按钮较小，用原图匹配更准
+    best_cx, best_cy, best_score = None, None, 0.0
+    for p in sign_paths:
+        cx, cy, score = find_template(p, CONFIDENCE, scale=1.0)
+        if cx is not None and score > best_score:
+            best_cx, best_cy, best_score = cx, cy, score
+
     cx_rwd, cy_rwd, score_rwd = find_template(REWARD_BUTTON_PATH, REWARD_CONFIDENCE, scale=1.0)
-    if cx_sign is not None and (cx_rwd is None or score_sign >= score_rwd):
-        return "sign", (cx_sign, cy_sign), score_sign
-    if cx_rwd is not None and (cx_sign is None or score_rwd > score_sign):
+
+    if best_cx is not None and (cx_rwd is None or best_score >= score_rwd):
+        return "sign", (best_cx, best_cy), best_score
+    if cx_rwd is not None and (best_cx is None or score_rwd > best_score):
         return "reward", (cx_rwd, cy_rwd), score_rwd
-    return "unknown", None, max(score_sign, score_rwd)
+    return "unknown", None, max(best_score, score_rwd)
 
 
 def capture_reward_area(center: tuple[int, int] | None = None) -> Path:
@@ -548,9 +564,9 @@ def main() -> int:
         print(f"[防检测] 随机延迟 {delay_seconds}s（最大 {args.max_delay}s）……")
         time.sleep(delay_seconds)
 
-    if not SIGN_BUTTON_PATH.exists():
-        print(f"错误：缺少签到按钮模板 {SIGN_BUTTON_PATH}")
-        print("请运行 capture_template.py 截取，或从截图复制到 assets/sign_button.png。")
+    if not SIGN_BUTTON_PATH.exists() and not SIGN_BUTTON_ALT_PATH.exists():
+        print(f"错误：缺少签到按钮模板 {SIGN_BUTTON_PATH} 或 {SIGN_BUTTON_ALT_PATH}")
+        print("请运行 capture_template.py 截取，或从截图复制到 assets/sign_button.png / sign_button_alt.png。")
         return 1
     if not REWARD_BUTTON_PATH.exists():
         print(f"警告：缺少查看奖励模板 {REWARD_BUTTON_PATH}，将无法判断今日是否已签到。")
@@ -586,6 +602,7 @@ def main() -> int:
     print("可能原因：WPS 界面更新、窗口被遮挡、DPI 缩放变化，或模板图与当前显示不一致。")
     print("请重新截取以下模板再试：")
     print("  - assets/sign_button.png（立即签到按钮）")
+    print("  - assets/sign_button_alt.png（立即签到按钮备用样式）")
     print("  - assets/reward_button.png（查看奖励按钮）")
     print("  - assets/open_panel_unpressed.png（右上角面板图标未按下状态）")
     print("  - assets/open_panel_pressed.png（右上角面板图标已按下状态）")
